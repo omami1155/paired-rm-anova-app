@@ -414,7 +414,7 @@ def localize_anova_table(anova_table: pd.DataFrame) -> pd.DataFrame:
     localized = anova_table.copy()
     localized = localized.rename(
         columns={
-            "index": "効果",
+            "index": "区分",
             "Num DF": "分子自由度",
             "Den DF": "分母自由度",
             "F Value": "F値",
@@ -422,8 +422,8 @@ def localize_anova_table(anova_table: pd.DataFrame) -> pd.DataFrame:
             "partial eta^2": "偏イータ二乗",
         }
     )
-    if "効果" in localized.columns:
-        localized["効果"] = localized["効果"].replace({"condition": "条件"})
+    if "区分" in localized.columns:
+        localized["区分"] = localized["区分"].replace({"condition": "条件"})
     return localized
 
 
@@ -437,7 +437,6 @@ def build_pairwise_table(
 
     for col_left, col_right in itertools.combinations(complete_df.columns.tolist(), 2):
         pair_diff = complete_df[col_left] - complete_df[col_right]
-        effect_size, effect_note = cohen_dz(pair_diff)
 
         if complete_df.shape[0] < 2:
             comparisons.append(
@@ -447,10 +446,7 @@ def build_pairwise_table(
                     "平均差": np.nan,
                     "未補正 p値": np.nan,
                     "補正 p値": np.nan,
-                    "効果量": effect_size,
-                    "効果量名": "Cohen's dz",
                     "解釈": "判定不可",
-                    "補足": "対応のある t 検定には 2 件以上の完全データが必要です。",
                 }
             )
             raw_pvalues.append(np.nan)
@@ -466,10 +462,7 @@ def build_pairwise_table(
                     "平均差": safe_float(pair_diff.mean()),
                     "未補正 p値": raw_pvalue,
                     "補正 p値": np.nan,
-                    "効果量": effect_size,
-                    "効果量名": "Cohen's dz",
                     "解釈": "",
-                    "補足": effect_note or "対応のある t 検定を実行しました。",
                 }
             )
             raw_pvalues.append(raw_pvalue)
@@ -481,10 +474,7 @@ def build_pairwise_table(
                     "平均差": np.nan,
                     "未補正 p値": np.nan,
                     "補正 p値": np.nan,
-                    "効果量": effect_size,
-                    "効果量名": "Cohen's dz",
                     "解釈": "判定不可",
-                    "補足": f"対応のある t 検定の実行に失敗しました: {exc}",
                 }
             )
             raw_pvalues.append(np.nan)
@@ -506,11 +496,9 @@ def build_pairwise_table(
                 safe_float(corrected[corrected_index]),
                 alpha,
             )
-            comparisons[row_index]["有意"] = "Yes" if reject[corrected_index] else "No"
             corrected_index += 1
 
     for row in comparisons:
-        row.setdefault("有意", "")
         row.setdefault("解釈", "判定不可")
 
     return pd.DataFrame(comparisons)
