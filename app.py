@@ -149,18 +149,13 @@ def coerce_numeric_columns(
 
 def summarize_series(series: pd.Series, label: str) -> dict[str, float | int | str]:
     clean = pd.Series(series).dropna()
-    q1 = clean.quantile(0.25) if not clean.empty else np.nan
-    q3 = clean.quantile(0.75) if not clean.empty else np.nan
-    iqr = q3 - q1 if not clean.empty else np.nan
 
     return {
         "条件": label,
         "有効 n": int(clean.size),
-        "欠損 / 除外": int(series.isna().sum()),
         "平均": float(clean.mean()) if clean.size else np.nan,
         "SD": float(clean.std(ddof=1)) if clean.size >= 2 else np.nan,
         "中央値": float(clean.median()) if clean.size else np.nan,
-        "IQR": float(iqr) if clean.size else np.nan,
         "最小": float(clean.min()) if clean.size else np.nan,
         "最大": float(clean.max()) if clean.size else np.nan,
     }
@@ -638,19 +633,7 @@ def to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8-sig")
 
 
-def render_data_quality_overview(
-    source_df: pd.DataFrame,
-    selected_df: pd.DataFrame,
-    dropped_counts: dict[str, int],
-) -> None:
-    total_dropped = sum(dropped_counts.values())
-    missing_cells = int(selected_df.isna().sum().sum())
-    col_metrics = st.columns(4)
-    col_metrics[0].metric("行数", int(source_df.shape[0]))
-    col_metrics[1].metric("選択条件数", int(selected_df.shape[1]))
-    col_metrics[2].metric("非数値から除外", total_dropped)
-    col_metrics[3].metric("欠損 / NaN セル", missing_cells)
-
+def render_data_quality_warning(dropped_counts: dict[str, int]) -> None:
     if any(value > 0 for value in dropped_counts.values()):
         detail = ", ".join(f"{column}: {count}" for column, count in dropped_counts.items() if count > 0)
         st.warning(f"数値に変換できない値を除外しました。列ごとの件数: {detail}")
@@ -806,7 +789,7 @@ def main() -> None:
         return
 
     selected_df, dropped_counts = coerce_numeric_columns(df, selected_cols)
-    render_data_quality_overview(df, selected_df, dropped_counts)
+    render_data_quality_warning(dropped_counts)
     render_summary_section(selected_df)
 
     if len(selected_cols) == 2:
