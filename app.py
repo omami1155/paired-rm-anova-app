@@ -103,7 +103,7 @@ def render_samples() -> None:
         )
         col_left, col_right = st.columns(2)
         with col_left:
-            st.markdown("**2条件の例**")
+            st.subheader("2条件の例")
             st.code(SAMPLE_TWO_CSV, language="csv")
             st.download_button(
                 label="サンプルCSVをダウンロード",
@@ -112,7 +112,7 @@ def render_samples() -> None:
                 mime="text/csv",
             )
         with col_right:
-            st.markdown("**3条件以上の例**")
+            st.subheader("3条件以上の例")
             st.code(SAMPLE_THREE_CSV, language="csv")
             st.download_button(
                 label="サンプルCSVをダウンロード",
