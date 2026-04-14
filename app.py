@@ -410,6 +410,23 @@ def compute_partial_eta_squared(anova_table: pd.DataFrame | None) -> float:
     return float(numerator / denominator)
 
 
+def localize_anova_table(anova_table: pd.DataFrame) -> pd.DataFrame:
+    localized = anova_table.copy()
+    localized = localized.rename(
+        columns={
+            "index": "効果",
+            "Num DF": "分子自由度",
+            "Den DF": "分母自由度",
+            "F Value": "F値",
+            "Pr > F": "p値",
+            "partial eta^2": "偏イータ二乗",
+        }
+    )
+    if "効果" in localized.columns:
+        localized["効果"] = localized["効果"].replace({"condition": "条件"})
+    return localized
+
+
 def build_pairwise_table(
     complete_df: pd.DataFrame,
     alpha: float,
@@ -516,7 +533,7 @@ def run_rm_anova_analysis(
                 subject="subject",
                 within=["condition"],
             ).fit()
-            anova_table = fitted.anova_table.reset_index().rename(columns={"index": "効果"})
+            anova_table = fitted.anova_table.reset_index()
         except Exception as exc:
             anova_note = f"反復測定 ANOVA の実行に失敗しました: {exc}"
     else:
@@ -525,6 +542,7 @@ def run_rm_anova_analysis(
     partial_eta_squared = compute_partial_eta_squared(anova_table)
     if anova_table is not None:
         anova_table["partial eta^2"] = partial_eta_squared
+        anova_table = localize_anova_table(anova_table)
 
     return RMAnovaResult(
         anova_table=anova_table,
