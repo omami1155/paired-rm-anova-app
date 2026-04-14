@@ -149,15 +149,19 @@ def coerce_numeric_columns(
 
 def summarize_series(series: pd.Series, label: str) -> dict[str, float | int | str]:
     clean = pd.Series(series).dropna()
+    q1 = clean.quantile(0.25) if not clean.empty else np.nan
+    q3 = clean.quantile(0.75) if not clean.empty else np.nan
 
     return {
-        "条件": label,
-        "有効 n": int(clean.size),
+        "グループ": label,
+        "n数": int(clean.size),
         "平均": float(clean.mean()) if clean.size else np.nan,
-        "SD": float(clean.std(ddof=1)) if clean.size >= 2 else np.nan,
+        "標準偏差": float(clean.std(ddof=1)) if clean.size >= 2 else np.nan,
+        "最小値": float(clean.min()) if clean.size else np.nan,
+        "Q1": float(q1) if clean.size else np.nan,
         "中央値": float(clean.median()) if clean.size else np.nan,
-        "最小": float(clean.min()) if clean.size else np.nan,
-        "最大": float(clean.max()) if clean.size else np.nan,
+        "Q3": float(q3) if clean.size else np.nan,
+        "最大値": float(clean.max()) if clean.size else np.nan,
     }
 
 
