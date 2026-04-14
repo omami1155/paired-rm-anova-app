@@ -248,7 +248,6 @@ def build_paired_results_rows(
     col_left: str,
     col_right: str,
     clean_df: pd.DataFrame,
-    diff: pd.Series,
     alpha: float,
     primary_test: str,
     shapiro_p: float,
@@ -258,13 +257,11 @@ def build_paired_results_rows(
 
     rows.append(
         {
-            "カテゴリ": "前提確認",
+            "区分": "前提確認",
             "検定": "Shapiro-Wilk（差分）",
             "p値": safe_float(shapiro_p),
             "α": alpha,
             "推奨": "",
-            "効果量": np.nan,
-            "効果量名": "",
             "解釈": interpret_normality(shapiro_p, alpha),
             "補足": shapiro_note or "差分の正規性を確認しました。",
         }
@@ -273,30 +270,25 @@ def build_paired_results_rows(
     if clean_df.shape[0] >= 2:
         try:
             t_result = stats.ttest_rel(clean_df[col_left], clean_df[col_right], nan_policy="omit")
-            dz_value, dz_note = cohen_dz(diff)
             rows.append(
                 {
-                    "カテゴリ": "主解析候補",
+                    "区分": "主解析候補",
                     "検定": "paired t-test",
                     "p値": safe_float(t_result.pvalue),
                     "α": alpha,
-                    "推奨": "主解析" if primary_test == "paired t-test" else "",
-                    "効果量": dz_value,
-                    "効果量名": "Cohen's dz",
+                    "推奨": "〇" if primary_test == "paired t-test" else "",
                     "解釈": interpret_difference(safe_float(t_result.pvalue), alpha),
-                    "補足": dz_note or "平均差に基づく検定です。",
+                    "補足": "平均差に基づく検定です。",
                 }
             )
         except Exception as exc:
             rows.append(
                 {
-                    "カテゴリ": "主解析候補",
+                    "区分": "主解析候補",
                     "検定": "paired t-test",
                     "p値": np.nan,
                     "α": alpha,
-                    "推奨": "主解析" if primary_test == "paired t-test" else "",
-                    "効果量": np.nan,
-                    "効果量名": "Cohen's dz",
+                    "推奨": "〇" if primary_test == "paired t-test" else "",
                     "解釈": "判定不可",
                     "補足": f"paired t-test の実行に失敗しました: {exc}",
                 }
@@ -304,13 +296,11 @@ def build_paired_results_rows(
     else:
         rows.append(
             {
-                "カテゴリ": "主解析候補",
+                "区分": "主解析候補",
                 "検定": "paired t-test",
                 "p値": np.nan,
                 "α": alpha,
-                "推奨": "主解析" if primary_test == "paired t-test" else "",
-                "効果量": np.nan,
-                "効果量名": "Cohen's dz",
+                "推奨": "〇" if primary_test == "paired t-test" else "",
                 "解釈": "判定不可",
                 "補足": "paired t-test には 2 ペア以上の完全データが必要です。",
             }
@@ -325,30 +315,25 @@ def build_paired_results_rows(
                 zero_method="wilcox",
                 method="auto",
             )
-            rbc_value, rbc_note = rank_biserial_correlation(diff)
             rows.append(
                 {
-                    "カテゴリ": "主解析候補",
+                    "区分": "主解析候補",
                     "検定": "Wilcoxon signed-rank",
                     "p値": safe_float(wilcoxon_result.pvalue),
                     "α": alpha,
-                    "推奨": "主解析" if primary_test == "Wilcoxon signed-rank" else "",
-                    "効果量": rbc_value,
-                    "効果量名": "Rank-biserial r",
+                    "推奨": "〇" if primary_test == "Wilcoxon signed-rank" else "",
                     "解釈": interpret_difference(safe_float(wilcoxon_result.pvalue), alpha),
-                    "補足": rbc_note or "順位和に基づくノンパラメトリック検定です。",
+                    "補足": "順位和に基づくノンパラメトリック検定です。",
                 }
             )
         except Exception as exc:
             rows.append(
                 {
-                    "カテゴリ": "主解析候補",
+                    "区分": "主解析候補",
                     "検定": "Wilcoxon signed-rank",
                     "p値": np.nan,
                     "α": alpha,
-                    "推奨": "主解析" if primary_test == "Wilcoxon signed-rank" else "",
-                    "効果量": np.nan,
-                    "効果量名": "Rank-biserial r",
+                    "推奨": "〇" if primary_test == "Wilcoxon signed-rank" else "",
                     "解釈": "判定不可",
                     "補足": f"Wilcoxon の実行に失敗しました: {exc}",
                 }
@@ -356,13 +341,11 @@ def build_paired_results_rows(
     else:
         rows.append(
             {
-                "カテゴリ": "主解析候補",
+                "区分": "主解析候補",
                 "検定": "Wilcoxon signed-rank",
                 "p値": np.nan,
                 "α": alpha,
-                "推奨": "主解析" if primary_test == "Wilcoxon signed-rank" else "",
-                "効果量": np.nan,
-                "効果量名": "Rank-biserial r",
+                "推奨": "〇" if primary_test == "Wilcoxon signed-rank" else "",
                 "解釈": "判定不可",
                 "補足": "Wilcoxon には 1 ペア以上の完全データが必要です。",
             }
@@ -382,7 +365,6 @@ def run_paired_analysis(df: pd.DataFrame, alpha: float) -> PairedAnalysisResult:
         col_left=col_left,
         col_right=col_right,
         clean_df=clean_df,
-        diff=diff,
         alpha=alpha,
         primary_test=primary_test,
         shapiro_p=shapiro_p,
@@ -654,12 +636,6 @@ def render_summary_section(selected_df: pd.DataFrame) -> None:
 def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
     st.subheader("対応のある 2 群比較")
 
-    metrics = st.columns(4)
-    metrics[0].metric("完全ペア", int(result.clean_df.shape[0]))
-    metrics[1].metric("除外行", int(result.excluded_rows))
-    metrics[2].metric("主解析", result.primary_test)
-    metrics[3].metric("主解析 p値", format_pvalue(result.primary_p))
-
     st.dataframe(result.results_df, use_container_width=True)
 
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
@@ -671,8 +647,7 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
 
     with tab_results:
         st.markdown(
-            "完全ペアのみで解析しています。効果量として `paired t-test` には "
-            "`Cohen's dz`、`Wilcoxon` には `rank-biserial correlation` を併記しました。"
+            "完全ペアのみで解析しています。`推奨` 列の `〇` が、このデータで主解析として採用した検定です。"
         )
 
     with tab_plots:
