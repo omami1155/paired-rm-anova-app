@@ -562,6 +562,7 @@ def create_qq_plot(diff: pd.Series):
     clean = diff.dropna()
     if clean.size >= 2:
         stats.probplot(clean, dist="norm", plot=ax)
+        ax.set_title("")
         ax.grid(alpha=0.3)
     else:
         ax.text(0.5, 0.5, "Not enough data", ha="center", va="center")
@@ -638,40 +639,31 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
 
     st.dataframe(result.results_df, use_container_width=True)
 
+    st.markdown("#### 解釈メモ")
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
         st.info("差分の正規性を大きく損なう所見はなく、paired t-test を主解析として扱いました。")
     else:
         st.info("差分の正規性を仮定しにくい、または判定できないため、Wilcoxon signed-rank を主解析として扱いました。")
 
-    tab_results, tab_plots, tab_data = st.tabs(["解釈", "図", "解析に使ったデータ"])
+    st.markdown(
+        "完全ペアのみで解析しています。`推奨` 列の `〇` が、このデータで主解析として採用した検定です。"
+    )
 
-    with tab_results:
-        st.markdown(
-            "完全ペアのみで解析しています。`推奨` 列の `〇` が、このデータで主解析として採用した検定です。"
-        )
+    st.markdown("#### QQプロット")
+    qq_figure = create_qq_plot(result.diff)
+    st.pyplot(qq_figure)
+    plt.close(qq_figure)
 
-    with tab_plots:
-        label_left, label_right = result.clean_df.columns.tolist()
-        col_left, col_right = st.columns(2)
-        with col_left:
-            hist_figure = create_histogram(result.diff, label_left, label_right)
-            st.pyplot(hist_figure)
-            plt.close(hist_figure)
-        with col_right:
-            qq_figure = create_qq_plot(result.diff)
-            st.pyplot(qq_figure)
-            plt.close(qq_figure)
-
-    with tab_data:
-        export_df = result.clean_df.copy()
-        export_df["difference"] = result.diff.values
-        st.dataframe(export_df, use_container_width=True)
-        st.download_button(
-            label="結果 CSV をダウンロード",
-            data=to_csv_bytes(result.results_df),
-            file_name="paired_test_results.csv",
-            mime="text/csv",
-        )
+    st.markdown("#### 解析に使ったデータ")
+    export_df = result.clean_df.copy()
+    export_df["difference"] = result.diff.values
+    st.dataframe(export_df, use_container_width=True)
+    st.download_button(
+        label="結果 CSV をダウンロード",
+        data=to_csv_bytes(result.results_df),
+        file_name="paired_test_results.csv",
+        mime="text/csv",
+    )
 
 
 def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> None:
