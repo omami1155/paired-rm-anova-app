@@ -642,18 +642,18 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
     st.markdown("#### 解釈メモ")
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
         st.info(
-            "差分の正規性を棄却する十分な根拠はなく、対応のある t 検定の前提を大きく損なう所見もみられないため、"
-            "このデータでは paired t-test を第一候補として扱いました。"
+            "差分の正規性を棄却する十分な根拠はありません。"
+            "この場合は paired t-test が第一候補です。"
         )
     elif pd.notna(result.shapiro_p):
         st.info(
-            "差分の正規性を仮定しにくい結果だったため、このデータでは正規性の仮定により依存しにくい "
-            "Wilcoxon signed-rank を第一候補として扱いました。"
+            "差分の正規性を仮定しにくい結果です。"
+            "この場合は Wilcoxon signed-rank が第一候補です。"
         )
     else:
         st.info(
-            "差分の正規性を十分に判定できなかったため、このデータではより保守的に "
-            "Wilcoxon signed-rank を第一候補として扱いました。"
+            "差分の正規性を十分に判定できません。"
+            "この場合は Wilcoxon signed-rank が第一候補です。"
         )
 
     st.markdown("#### QQプロット")
