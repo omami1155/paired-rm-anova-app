@@ -641,13 +641,20 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
 
     st.markdown("#### 解釈メモ")
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
-        st.info("差分の正規性を大きく損なう所見はなく、paired t-test を主解析として扱いました。")
+        st.info(
+            "差分の正規性を棄却する十分な根拠はなく、対応のある t 検定の前提を大きく損なう所見もみられないため、"
+            "このデータでは paired t-test を第一候補として扱いました。"
+        )
+    elif pd.notna(result.shapiro_p):
+        st.info(
+            "差分の正規性を仮定しにくい結果だったため、このデータでは正規性の仮定により依存しにくい "
+            "Wilcoxon signed-rank を第一候補として扱いました。"
+        )
     else:
-        st.info("差分の正規性を仮定しにくい、または判定できないため、Wilcoxon signed-rank を主解析として扱いました。")
-
-    st.markdown(
-        "完全ペアのみで解析しています。`推奨` 列の `〇` が、このデータで主解析として採用した検定です。"
-    )
+        st.info(
+            "差分の正規性を十分に判定できなかったため、このデータではより保守的に "
+            "Wilcoxon signed-rank を第一候補として扱いました。"
+        )
 
     st.markdown("#### QQプロット")
     qq_figure = create_qq_plot(result.diff)
