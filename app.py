@@ -187,10 +187,10 @@ def safe_shapiro(values: pd.Series) -> tuple[float, str]:
 
 def interpret_normality(pvalue: float, alpha: float) -> str:
     if pd.isna(pvalue):
-        return "差分の正規性を十分に判定できません"
+        return "正規性を十分に判定できません"
     if pvalue < alpha:
-        return "差分の正規性を仮定しにくい結果です"
-    return "差分の正規性を棄却する十分な根拠はありません"
+        return "正規性を仮定しにくい結果です"
+    return "正規性を棄却する十分な根拠なし"
 
 
 def interpret_difference(pvalue: float, alpha: float) -> str:
@@ -621,11 +621,11 @@ def to_csv_bytes(df: pd.DataFrame) -> bytes:
 
 
 def render_minor_heading(title: str) -> None:
-    st.markdown(f"#### {title}")
+    st.subheader(title)
 
 
 def render_detail_heading(title: str) -> None:
-    st.markdown(f"##### {title}")
+    st.subheader(title)
 
 
 def render_data_quality_warning(dropped_counts: dict[str, int]) -> None:
@@ -650,17 +650,17 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
     render_minor_heading("解釈メモ")
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
         st.info(
-            "差分の正規性を棄却する十分な根拠はありません。"
+            "正規性を棄却する十分な根拠なし。"
             "この場合は paired t-test が第一候補です。"
         )
     elif pd.notna(result.shapiro_p):
         st.info(
-            "差分の正規性を仮定しにくい結果です。"
+            "正規性を仮定しにくい結果です。"
             "この場合は Wilcoxon signed-rank が第一候補です。"
         )
     else:
         st.info(
-            "差分の正規性を十分に判定できません。"
+            "正規性を十分に判定できません。"
             "この場合は Wilcoxon signed-rank が第一候補です。"
         )
 
