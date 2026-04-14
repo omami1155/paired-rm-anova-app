@@ -1,0 +1,6 @@
+streamlit>=1.33
+numpy>=1.26
+pandas>=2.0
+matplotlib>=3.8
+scipy>=1.11
+statsmodels>=0.14
