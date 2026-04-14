@@ -684,12 +684,6 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
 def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> None:
     st.subheader("反復測定 ANOVA")
 
-    metrics = st.columns(4)
-    metrics[0].metric("完全ケース", int(result.complete_df.shape[0]))
-    metrics[1].metric("除外行", int(result.excluded_rows))
-    metrics[2].metric("条件数", int(result.complete_df.shape[1]))
-    metrics[3].metric("partial eta^2", "NA" if pd.isna(result.partial_eta_squared) else f"{result.partial_eta_squared:.3f}")
-
     figure_left, figure_right = st.columns(2)
     with figure_left:
         spaghetti_figure = create_spaghetti_plot(result.complete_df)
