@@ -187,10 +187,10 @@ def safe_shapiro(values: pd.Series) -> tuple[float, str]:
 
 def interpret_normality(pvalue: float, alpha: float) -> str:
     if pd.isna(pvalue):
-        return "判定不可"
+        return "差分の正規性を十分に判定できません"
     if pvalue < alpha:
-        return "正規性を仮定しにくい"
-    return "正規性を仮定してよい可能性が高い"
+        return "差分の正規性を仮定しにくい結果です"
+    return "差分の正規性を棄却する十分な根拠はありません"
 
 
 def interpret_difference(pvalue: float, alpha: float) -> str:
@@ -620,6 +620,14 @@ def to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8-sig")
 
 
+def render_minor_heading(title: str) -> None:
+    st.markdown(f"#### {title}")
+
+
+def render_detail_heading(title: str) -> None:
+    st.markdown(f"##### {title}")
+
+
 def render_data_quality_warning(dropped_counts: dict[str, int]) -> None:
     if any(value > 0 for value in dropped_counts.values()):
         detail = ", ".join(f"{column}: {count}" for column, count in dropped_counts.items() if count > 0)
@@ -639,7 +647,7 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
 
     st.dataframe(result.results_df, use_container_width=True)
 
-    st.markdown("#### 解釈メモ")
+    render_minor_heading("解釈メモ")
     if pd.notna(result.shapiro_p) and result.shapiro_p >= alpha:
         st.info(
             "差分の正規性を棄却する十分な根拠はありません。"
@@ -656,12 +664,12 @@ def render_paired_results(result: PairedAnalysisResult, alpha: float) -> None:
             "この場合は Wilcoxon signed-rank が第一候補です。"
         )
 
-    st.markdown("#### QQプロット")
+    render_minor_heading("QQプロット")
     qq_figure = create_qq_plot(result.diff)
     st.pyplot(qq_figure)
     plt.close(qq_figure)
 
-    st.markdown("#### 解析に使ったデータ")
+    render_minor_heading("解析に使ったデータ")
     export_df = result.clean_df.copy()
     export_df["difference"] = result.diff.values
     st.dataframe(export_df, use_container_width=True)
@@ -695,10 +703,10 @@ def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> No
     if result.anova_note:
         st.error(result.anova_note)
     else:
-        st.markdown("**ANOVA 結果**")
+        render_minor_heading("ANOVA 結果")
         st.dataframe(result.anova_table, use_container_width=True)
 
-    st.markdown(f"**事後比較（{CORRECTION_LABELS[correction_method]} 補正）**")
+    render_minor_heading(f"事後比較（{CORRECTION_LABELS[correction_method]} 補正）")
     st.dataframe(result.pairwise_df, use_container_width=True)
     st.info(
         "反復測定 ANOVA と事後比較は、選択したすべての条件で欠損のない完全ケースのみで計算しています。"
@@ -710,9 +718,9 @@ def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> No
             "事後比較は対応のある t 検定を全組み合わせで実行し、選択した補正方法で p 値を補正しています。"
         )
     with tab_data:
-        st.markdown("**完全ケース（wide 形式）**")
+        render_detail_heading("完全ケース（wide 形式）")
         st.dataframe(result.complete_df, use_container_width=True)
-        st.markdown("**long 形式**")
+        render_detail_heading("long 形式")
         st.dataframe(result.long_df, use_container_width=True)
 
     download_left, download_right = st.columns(2)
