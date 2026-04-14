@@ -74,7 +74,7 @@ def configure_page() -> None:
     st.title(PAGE_TITLE)
     st.caption(PAGE_CAPTION)
     st.info(
-        "wide 形式の CSV を想定しています。行が被験者、列が条件です。"
+        "列が条件、行がサンプルです。"
         "2条件なら対応のある検定、3条件以上なら反復測定 ANOVA を実行します。"
     )
 
@@ -99,7 +99,7 @@ def render_sidebar() -> Settings:
 def render_samples() -> None:
     with st.expander("CSV形式の例", expanded=True):
         st.markdown(
-            "1列が1条件、1行が1サンプルです。ヘッダー付きのCSVを読み込みます。"
+            "列が条件、行がサンプルです。ヘッダー付きのCSVを読み込みます。"
         )
         col_left, col_right = st.columns(2)
         with col_left:
