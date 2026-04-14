@@ -708,11 +708,6 @@ def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> No
 
     render_minor_heading(f"事後比較（{CORRECTION_LABELS[correction_method]} 補正）")
     st.dataframe(result.pairwise_df, use_container_width=True)
-    render_minor_heading("解析に使ったデータ")
-    render_detail_heading("完全ケース（wide 形式）")
-    st.dataframe(result.complete_df, use_container_width=True)
-    render_detail_heading("long 形式")
-    st.dataframe(result.long_df, use_container_width=True)
 
     st.caption("※事後比較は対応のある t 検定を全組み合わせで実行し、選択した補正方法で p 値を補正しています。")
 
