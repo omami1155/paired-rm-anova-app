@@ -708,20 +708,13 @@ def render_rm_anova_results(result: RMAnovaResult, correction_method: str) -> No
 
     render_minor_heading(f"事後比較（{CORRECTION_LABELS[correction_method]} 補正）")
     st.dataframe(result.pairwise_df, use_container_width=True)
-    st.info(
-        "反復測定 ANOVA と事後比較は、選択したすべての条件で欠損のない完全ケースのみで計算しています。"
-    )
+    render_minor_heading("解析に使ったデータ")
+    render_detail_heading("完全ケース（wide 形式）")
+    st.dataframe(result.complete_df, use_container_width=True)
+    render_detail_heading("long 形式")
+    st.dataframe(result.long_df, use_container_width=True)
 
-    tab_notes, tab_data = st.tabs(["解釈", "解析に使ったデータ"])
-    with tab_notes:
-        st.markdown(
-            "事後比較は対応のある t 検定を全組み合わせで実行し、選択した補正方法で p 値を補正しています。"
-        )
-    with tab_data:
-        render_detail_heading("完全ケース（wide 形式）")
-        st.dataframe(result.complete_df, use_container_width=True)
-        render_detail_heading("long 形式")
-        st.dataframe(result.long_df, use_container_width=True)
+    st.caption("※事後比較は対応のある t 検定を全組み合わせで実行し、選択した補正方法で p 値を補正しています。")
 
     download_left, download_right = st.columns(2)
     with download_left:
