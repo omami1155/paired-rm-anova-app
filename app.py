@@ -97,16 +97,16 @@ def render_sidebar() -> Settings:
 
 
 def render_samples() -> None:
-    with st.expander("CSV テンプレート", expanded=True):
+    with st.expander("CSV形式の例", expanded=True):
         st.markdown(
-            "1列が1条件、1行が1被験者です。ヘッダー付きの wide 形式 CSV を読み込みます。"
+            "1列が1条件、1行が1サンプルです。ヘッダー付きのCSVを読み込みます。"
         )
         col_left, col_right = st.columns(2)
         with col_left:
             st.markdown("**2条件の例**")
             st.code(SAMPLE_TWO_CSV, language="csv")
             st.download_button(
-                label="2条件サンプルをダウンロード",
+                label="サンプルCSVをダウンロード",
                 data=SAMPLE_TWO_CSV.encode("utf-8-sig"),
                 file_name="sample_paired_two_conditions.csv",
                 mime="text/csv",
@@ -115,7 +115,7 @@ def render_samples() -> None:
             st.markdown("**3条件以上の例**")
             st.code(SAMPLE_THREE_CSV, language="csv")
             st.download_button(
-                label="3条件サンプルをダウンロード",
+                label="サンプルCSVをダウンロード",
                 data=SAMPLE_THREE_CSV.encode("utf-8-sig"),
                 file_name="sample_repeated_measures.csv",
                 mime="text/csv",
