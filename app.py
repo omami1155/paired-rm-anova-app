@@ -191,12 +191,11 @@ def サンプル説明を表示する() -> None:
     with st.expander("CSVの作り方", expanded=True):
         st.markdown(
             """
-**このアプリで使うCSVは wide形式のみです。**
 
-- 1行 = 1サンプル
-- 必須の基本列 = `sample_id`, `group`, `condition`
-- `sample_id` はサンプル番号、`group` は群名、`condition` は条件名です
-- 時間列 = `t0`, `t1`, `t2` のように左から時系列順で並べてください
+- 1行に1サンプルを記入してください
+- 必須の基本列は`sample_id`, `group`, `condition`です
+- `sample_id` はサンプル番号、`group`は各群名、`condition`は各条件名です
+- 時間列は`t0`, `t1`, `t2`のように左から時系列順で並べてください
 - `condition` には任意の条件名を入れてください
 - 測定値のセルには **数値だけ** を入れてください
 - 欠測は空欄でかまいません
