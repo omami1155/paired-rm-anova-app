@@ -475,6 +475,72 @@ def create_profile_plot(long_df: pd.DataFrame):
     return fig
 
 
+def 検定項グラフ表示名を作る(項名: str) -> str:
+    表示名 = str(項名)
+    for 元, 新 in (
+        ("群", "Group"),
+        ("条件", "Condition"),
+        ("時間", "Time"),
+        ("×", " × "),
+    ):
+        表示名 = 表示名.replace(元, 新)
+    return 表示名
+
+
+def 全体検定結果プロットを作る(全体検定表: pd.DataFrame, 有意水準: float):
+    作図用 = 全体検定表.copy()
+    if 作図用.empty:
+        return None
+
+    作図用["カイ二乗"] = pd.to_numeric(作図用["カイ二乗"], errors="coerce")
+    作図用["p値"] = pd.to_numeric(作図用["p値"], errors="coerce")
+    作図用 = 作図用.dropna(subset=["カイ二乗", "p値"]).reset_index(drop=True)
+    if 作図用.empty:
+        return None
+
+    作図用["グラフ表示項"] = 作図用["項"].map(検定項グラフ表示名を作る)
+    作図用["色"] = np.where(作図用["p値"] < 有意水準, "#d55e00", "#7f8c8d")
+    最小p値 = np.nextafter(0.0, 1.0)
+    作図用["-log10(p)"] = -np.log10(np.clip(作図用["p値"], 最小p値, 1.0))
+    しきい値線位置 = -np.log10(有意水準)
+
+    y位置 = np.arange(len(作図用))
+    fig, (左軸, 右軸) = plt.subplots(
+        ncols=2,
+        figsize=(14, max(4.5, len(作図用) * 0.85)),
+        sharey=True,
+        gridspec_kw={"width_ratios": [1.1, 1.2]},
+    )
+
+    左軸.barh(y位置, 作図用["カイ二乗"], color=作図用["色"], alpha=0.9)
+    左軸.set_yticks(y位置)
+    左軸.set_yticklabels(作図用["グラフ表示項"])
+    左軸.invert_yaxis()
+    左軸.set_xlabel("Wald chi-square")
+    左軸.set_title("Overall test statistic")
+    左軸.grid(axis="x", alpha=0.25)
+    左軸.set_xlim(0, max(float(作図用["カイ二乗"].max()) * 1.15, 1.0))
+
+    右軸.barh(y位置, 作図用["-log10(p)"], color=作図用["色"], alpha=0.9)
+    右軸.axvline(しきい値線位置, color="#2c3e50", linestyle="--", linewidth=1.4)
+    右軸.set_xlabel("-log10(p-value)")
+    右軸.set_title("P-value overview")
+    右軸.grid(axis="x", alpha=0.25)
+    右軸.set_xlim(0, max(float(作図用["-log10(p)"].max()), しきい値線位置) + 0.8)
+
+    for 行番号, 行 in 作図用.iterrows():
+        右軸.text(
+            行["-log10(p)"] + 0.03,
+            行番号,
+            f"p={行['p値']:.3g}",
+            va="center",
+            fontsize=9,
+        )
+
+    fig.tight_layout()
+    return fig
+
+
 def 解析データ概要を表示する(長形式データ: pd.DataFrame) -> None:
     st.subheader("解析に使う整形後データ")
     表示用整形データ = 表示用データを作る(長形式データ)
@@ -518,7 +584,7 @@ def 記述統計を表示する(長形式データ: pd.DataFrame) -> None:
         st.dataframe(時間表, use_container_width=True, hide_index=True)
 
 
-def LMM結果を表示する(適合結果: LMM適合結果) -> None:
+def LMM結果を表示する(適合結果: LMM適合結果, 有意水準: float) -> None:
     st.subheader("LMM主解析")
     st.code(適合結果.数式)
 
@@ -538,6 +604,14 @@ def LMM結果を表示する(適合結果: LMM適合結果) -> None:
             "偏差コントラストによる Wald のカイ二乗検定です。"
             " 参照水準やCSVの行順に依存しにくい形で、切片は表示から外しています。"
         )
+        全体検定図 = 全体検定結果プロットを作る(適合結果.全体検定表, 有意水準)
+        if 全体検定図 is not None:
+            st.pyplot(全体検定図)
+            plt.close(全体検定図)
+            st.caption(
+                f"左は Wald のカイ二乗統計量、右は p値の見やすい表示です。"
+                f" 破線は有意水準 α={有意水準:.2f} を表します。"
+            )
         st.download_button(
             label="全体検定CSVをダウンロード",
             data=csvをバイト列へ変換する(適合結果.全体検定表),
@@ -592,7 +666,7 @@ def メイン() -> None:
     記述統計を表示する(長形式データ)
 
     適合結果 = LMMを適合する(長形式データ, 設定.有意水準)
-    LMM結果を表示する(適合結果)
+    LMM結果を表示する(適合結果, 設定.有意水準)
 
 
 if __name__ == "__main__":
