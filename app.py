@@ -84,6 +84,24 @@ def ordered_unique(values: pd.Series) -> list[str]:
     return ordered
 
 
+def display_heat_label(value: object) -> str:
+    text = str(value).strip().lower()
+    if text in {"加熱", "heat", "heated"}:
+        return "heat"
+    if text in {"非加熱", "no heat", "no_heat", "unheated", "non-heated", "non heated"}:
+        return "no heat"
+    return str(value)
+
+
+def display_time_label(value: object) -> str:
+    text = str(value).strip()
+    if text in {"直後", "immediate", "baseline", "0w", "0W", "t0", "T0"}:
+        return "0W"
+    if text.endswith("週") and text[:-1].isdigit():
+        return f"{text[:-1]}W"
+    return text
+
+
 def load_csv_flex(uploaded_file) -> pd.DataFrame:
     raw = uploaded_file.getvalue()
     for encoding in ("utf-8", "utf-8-sig", "cp932"):
@@ -284,7 +302,9 @@ def summarize_long_df(long_df: pd.DataFrame) -> pd.DataFrame:
         .agg(["count", "mean", "std", "median", "min", "max"])
         .reset_index()
     )
-    summary.columns = ["群", "加熱", "時間", "n", "平均", "標準偏差", "中央値", "最小値", "最大値"]
+    summary["heat"] = summary["heat"].map(display_heat_label)
+    summary["time"] = summary["time"].map(display_time_label)
+    summary.columns = ["Group", "Heat", "Time", "N", "Mean", "SD", "Median", "Min", "Max"]
     return summary
 
 
@@ -338,14 +358,14 @@ def fit_lmm(long_df: pd.DataFrame, alpha: float) -> LMMFitResult:
         wald = fitted.wald_test_terms(scalar=True)
         terms_table = wald.table.reset_index().rename(
             columns={
-                "index": "項",
-                "statistic": "χ²",
-                "pvalue": "p値",
-                "df_constraint": "自由度",
+                "index": "Term",
+                "statistic": "Chi-square",
+                "pvalue": "p-value",
+                "df_constraint": "df",
             }
         )
-        terms_table["判定"] = terms_table["p値"].apply(
-            lambda p: "有意" if pd.notna(p) and p < alpha else "NS"
+        terms_table["Decision"] = terms_table["p-value"].apply(
+            lambda p: "Significant" if pd.notna(p) and p < alpha else "NS"
         )
     except Exception as exc:
         notes.append(f"固定効果の全体検定表を作れませんでした: {exc}")
@@ -353,11 +373,11 @@ def fit_lmm(long_df: pd.DataFrame, alpha: float) -> LMMFitResult:
     try:
         coefficients_table = pd.DataFrame(
             {
-                "係数": fitted.fe_params.index,
-                "推定値": fitted.fe_params.values,
-                "標準誤差": fitted.bse_fe.values,
-                "z値": fitted.tvalues.loc[fitted.fe_params.index].values,
-                "p値": fitted.pvalues.loc[fitted.fe_params.index].values,
+                "Coefficient": fitted.fe_params.index,
+                "Estimate": fitted.fe_params.values,
+                "SE": fitted.bse_fe.values,
+                "z": fitted.tvalues.loc[fitted.fe_params.index].values,
+                "p-value": fitted.pvalues.loc[fitted.fe_params.index].values,
             }
         )
     except Exception as exc:
@@ -391,14 +411,21 @@ def create_profile_plot(long_df: pd.DataFrame):
         sds = part["std"].fillna(0).to_numpy()
         sem = np.divide(sds, np.sqrt(np.maximum(counts, 1)), out=np.zeros_like(sds), where=np.maximum(counts, 1) > 0)
         x = np.arange(len(part))
-        ax.errorbar(x, means, yerr=sem, marker="o", capsize=3, label=f"{group}-{heat}")
+        ax.errorbar(
+            x,
+            means,
+            yerr=sem,
+            marker="o",
+            capsize=3,
+            label=f"{group}-{display_heat_label(heat)}",
+        )
 
-    time_labels = [str(x) for x in summary["time"].drop_duplicates().tolist()]
+    time_labels = [display_time_label(x) for x in summary["time"].drop_duplicates().tolist()]
     ax.set_xticks(np.arange(len(time_labels)))
     ax.set_xticklabels(time_labels)
-    ax.set_xlabel("時間")
-    ax.set_ylabel("測定値")
-    ax.set_title("群 × 加熱ごとの平均推移（エラーバー = SEM）")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    ax.set_title("Mean profiles by group and heat (error bars = SEM)")
     ax.grid(axis="y", alpha=0.3)
     ax.legend(ncol=2, fontsize=9)
     fig.tight_layout()
@@ -409,8 +436,9 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(9, 5))
     selected_keys = long_df["subject_key"].drop_duplicates().tolist()[: min(30, long_df["subject_key"].nunique())]
     subset = long_df[long_df["subject_key"].isin(selected_keys)].copy()
-    time_labels = [str(x) for x in long_df["time"].cat.categories.tolist()]
-    xmap = {label: idx for idx, label in enumerate(time_labels)}
+    time_keys = [str(x) for x in long_df["time"].cat.categories.tolist()]
+    time_labels = [display_time_label(x) for x in time_keys]
+    xmap = {label: idx for idx, label in enumerate(time_keys)}
 
     for _, part in subset.groupby("subject_key"):
         xs = [xmap[str(x)] for x in part["time"].astype(str).tolist()]
@@ -418,9 +446,9 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
 
     ax.set_xticks(np.arange(len(time_labels)))
     ax.set_xticklabels(time_labels)
-    ax.set_xlabel("時間")
-    ax.set_ylabel("測定値")
-    ax.set_title("個体ごとの推移（先頭30サンプルまで）")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    ax.set_title("Subject-level trajectories (first 30 samples)")
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     return fig
@@ -440,12 +468,12 @@ def apply_pvalue_correction(
         valid_pvals = [pvals[i] for i in valid_indices]
         _, corrected, _, _ = multipletests(valid_pvals, alpha=alpha, method=correction_method)
         for index, corrected_p in zip(valid_indices, corrected):
-            rows[index]["補正 p値"] = safe_float(corrected_p)
-            rows[index]["判定"] = "有意" if corrected_p < alpha else "NS"
+            rows[index]["Adjusted p-value"] = safe_float(corrected_p)
+            rows[index]["Decision"] = "Significant" if corrected_p < alpha else "NS"
 
     for row in rows:
-        if row.get("判定", "") == "":
-            row["判定"] = "判定不可"
+        if row.get("Decision", "") == "":
+            row["Decision"] = "Not available"
     return pd.DataFrame(rows)
 
 
@@ -465,14 +493,14 @@ def run_heat_posthoc(long_df: pd.DataFrame, alpha: float, correction_method: str
         if len(x) < 2 or len(y) < 2:
             rows.append(
                 {
-                    "比較": f"{group} / {time}: {heat_a} vs {heat_b}",
+                    "Comparison": f"{group} / {display_time_label(time)}: {display_heat_label(heat_a)} vs {display_heat_label(heat_b)}",
                     "n1": int(len(x)),
                     "n2": int(len(y)),
-                    "平均差": np.nan,
-                    "未補正 p値": np.nan,
-                    "補正 p値": np.nan,
-                    "方法": "Welch t-test",
-                    "判定": "判定不可",
+                    "Mean difference": np.nan,
+                    "Raw p-value": np.nan,
+                    "Adjusted p-value": np.nan,
+                    "Method": "Welch t-test",
+                    "Decision": "Not available",
                 }
             )
             pvals.append(np.nan)
@@ -482,14 +510,14 @@ def run_heat_posthoc(long_df: pd.DataFrame, alpha: float, correction_method: str
         pvals.append(safe_float(test.pvalue))
         rows.append(
             {
-                "比較": f"{group} / {time}: {heat_a} vs {heat_b}",
+                "Comparison": f"{group} / {display_time_label(time)}: {display_heat_label(heat_a)} vs {display_heat_label(heat_b)}",
                 "n1": int(len(x)),
                 "n2": int(len(y)),
-                "平均差": safe_float(x.mean() - y.mean()),
-                "未補正 p値": safe_float(test.pvalue),
-                "補正 p値": np.nan,
-                "方法": "Welch t-test",
-                "判定": "",
+                "Mean difference": safe_float(x.mean() - y.mean()),
+                "Raw p-value": safe_float(test.pvalue),
+                "Adjusted p-value": np.nan,
+                "Method": "Welch t-test",
+                "Decision": "",
             }
         )
 
@@ -511,13 +539,13 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
             if baseline not in wide.columns or later not in wide.columns:
                 rows.append(
                     {
-                        "比較": f"{group} / {heat}: {baseline} vs {later}",
+                        "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
                         "n": 0,
-                        "平均差": np.nan,
-                        "未補正 p値": np.nan,
-                        "補正 p値": np.nan,
-                        "方法": "paired t-test",
-                        "判定": "判定不可",
+                        "Mean difference": np.nan,
+                        "Raw p-value": np.nan,
+                        "Adjusted p-value": np.nan,
+                        "Method": "paired t-test",
+                        "Decision": "Not available",
                     }
                 )
                 pvals.append(np.nan)
@@ -527,13 +555,13 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
             if len(pair) < 2:
                 rows.append(
                     {
-                        "比較": f"{group} / {heat}: {baseline} vs {later}",
+                        "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
                         "n": int(len(pair)),
-                        "平均差": np.nan,
-                        "未補正 p値": np.nan,
-                        "補正 p値": np.nan,
-                        "方法": "paired t-test",
-                        "判定": "判定不可",
+                        "Mean difference": np.nan,
+                        "Raw p-value": np.nan,
+                        "Adjusted p-value": np.nan,
+                        "Method": "paired t-test",
+                        "Decision": "Not available",
                     }
                 )
                 pvals.append(np.nan)
@@ -543,13 +571,13 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
             pvals.append(safe_float(test.pvalue))
             rows.append(
                 {
-                    "比較": f"{group} / {heat}: {baseline} vs {later}",
+                    "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
                     "n": int(len(pair)),
-                    "平均差": safe_float(pair[baseline].mean() - pair[later].mean()),
-                    "未補正 p値": safe_float(test.pvalue),
-                    "補正 p値": np.nan,
-                    "方法": "paired t-test",
-                    "判定": "",
+                    "Mean difference": safe_float(pair[baseline].mean() - pair[later].mean()),
+                    "Raw p-value": safe_float(test.pvalue),
+                    "Adjusted p-value": np.nan,
+                    "Method": "paired t-test",
+                    "Decision": "",
                 }
             )
 
@@ -575,7 +603,7 @@ def render_dataset_overview(long_df: pd.DataFrame) -> None:
 
 
 def render_summary(long_df: pd.DataFrame) -> None:
-    st.subheader("記述統計")
+    st.subheader("Descriptive statistics")
     summary_df = summarize_long_df(long_df)
     st.dataframe(summary_df, use_container_width=True)
     st.download_button(
@@ -611,7 +639,7 @@ def render_lmm_results(fit: LMMFitResult) -> None:
             st.warning(note)
 
     if fit.terms_table is not None:
-        st.markdown("**固定効果の全体検定（Wald χ²）**")
+        st.markdown("**Overall fixed-effect tests (Wald Chi-square)**")
         st.dataframe(fit.terms_table, use_container_width=True)
         st.caption(
             "通常はまず `group:heat:time` の交互作用を見て、"
@@ -625,7 +653,7 @@ def render_lmm_results(fit: LMMFitResult) -> None:
         )
 
     if fit.coefficients_table is not None:
-        st.markdown("**固定効果係数**")
+        st.markdown("**Fixed-effect coefficients**")
         st.dataframe(fit.coefficients_table, use_container_width=True)
         st.download_button(
             label="固定効果係数CSVをダウンロード",
@@ -636,14 +664,14 @@ def render_lmm_results(fit: LMMFitResult) -> None:
 
 
 def render_posthoc(long_df: pd.DataFrame, settings: Settings) -> None:
-    st.subheader("補助比較")
+    st.subheader("Post hoc comparisons")
     st.caption("主たる結論は LMM 主解析を優先してください。ここは読みやすさ重視の補助解析です。")
 
     heat_df = run_heat_posthoc(long_df, settings.alpha, settings.correction_method)
     time_df = run_time_posthoc_against_baseline(long_df, settings.alpha, settings.correction_method)
 
     if not heat_df.empty:
-        st.markdown("**各群 × 各時点での 加熱 vs 非加熱**")
+        st.markdown("**Heat vs no heat within each group and time point**")
         st.dataframe(heat_df, use_container_width=True)
         st.download_button(
             label="加熱 vs 非加熱 比較CSVをダウンロード",
@@ -653,7 +681,7 @@ def render_posthoc(long_df: pd.DataFrame, settings: Settings) -> None:
         )
 
     if not time_df.empty:
-        st.markdown("**各群 × 各加熱条件での ベースライン vs 各時点**")
+        st.markdown("**Baseline vs each later time point within each group and heat condition**")
         st.dataframe(time_df, use_container_width=True)
         st.download_button(
             label="ベースライン比較CSVをダウンロード",
