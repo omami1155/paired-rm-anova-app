@@ -444,16 +444,13 @@ def create_profile_plot(long_df: pd.DataFrame):
     for (group, heat), part in summary.groupby(["group", "heat_display"], observed=True):
         part = part.set_index("time_display").reindex(time_labels).reset_index()
         means = part["mean"].to_numpy(dtype=float)
-        counts = part["count"].fillna(0).to_numpy(dtype=float)
-        sds = part["std"].fillna(0).to_numpy(dtype=float)
-        sem = np.divide(sds, np.sqrt(np.maximum(counts, 1)), out=np.zeros_like(sds), where=np.maximum(counts, 1) > 0)
-        ax.errorbar(x_positions, means, yerr=sem, marker="o", capsize=3, label=f"{group}-{heat}")
+        ax.plot(x_positions, means, marker="o", label=f"{group}-{heat}")
 
     ax.set_xticks(x_positions)
     ax.set_xticklabels(time_labels)
     ax.set_xlabel("Time")
     ax.set_ylabel("Value")
-    ax.set_title("Mean profiles by group and heat (error bars = SEM)")
+    ax.set_title("Mean profiles by group and heat")
     ax.grid(axis="y", alpha=0.3)
     ax.legend(ncol=2, fontsize=9)
     fig.tight_layout()
