@@ -59,9 +59,10 @@ def 検定項名を整える(項名: str) -> str:
 
     整形後 = 項名
     for 元, 新 in (
-        ("C(group, Sum)", "group"),
-        ("C(condition, Sum)", "condition"),
-        ("C(time, Sum)", "time"),
+        ("C(group, Sum)", "群"),
+        ("C(condition, Sum)", "条件"),
+        ("C(time, Sum)", "時間"),
+        (":", "×"),
     ):
         整形後 = 整形後.replace(元, 新)
     return 整形後
@@ -500,8 +501,8 @@ def LMM結果を表示する(適合結果: LMM適合結果) -> None:
         st.markdown("**固定効果の全体検定**")
         st.dataframe(適合結果.全体検定表, use_container_width=True)
         st.caption(
-            "Sum contrast による Wald のカイ二乗検定です。"
-            " 参照水準やCSVの行順に依存しにくい形で、Intercept は表示から外しています。"
+            "偏差コントラストによる Wald のカイ二乗検定です。"
+            " 参照水準やCSVの行順に依存しにくい形で、切片は表示から外しています。"
         )
         st.download_button(
             label="全体検定CSVをダウンロード",
@@ -513,7 +514,7 @@ def LMM結果を表示する(適合結果: LMM適合結果) -> None:
     if 適合結果.係数表 is not None:
         st.markdown("**固定効果係数**")
         st.dataframe(適合結果.係数表, use_container_width=True)
-        st.caption("係数は Sum contrast 符号化で推定されるため、各水準の偏差として解釈してください。")
+        st.caption("係数は偏差コントラストで推定されるため、各水準の偏差として解釈してください。")
         st.download_button(
             label="固定効果係数CSVをダウンロード",
             data=csvをバイト列へ変換する(適合結果.係数表),
