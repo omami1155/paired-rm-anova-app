@@ -96,6 +96,27 @@ def 時間表示を整える(値: object) -> str:
     return 文字列
 
 
+def グラフ用加熱表示を整える(値: object) -> str:
+    文字列 = str(値).strip().lower()
+    if 文字列 in {"加熱", "heat", "heated"}:
+        return "Heated"
+    if 文字列 in {"非加熱", "no heat", "no_heat", "unheated", "non-heated", "non heated"}:
+        return "Unheated"
+    return str(値).strip()
+
+
+def グラフ用時間表示を整える(値: object) -> str:
+    文字列 = str(値).strip()
+    小文字 = 文字列.lower()
+    if 小文字 in {"直後", "immediate", "baseline", "0w", "t0"}:
+        return "0W"
+    if 文字列.endswith("週") and 文字列[:-1].isdigit():
+        return f"{文字列[:-1]}W"
+    if 小文字.endswith("w") and 小文字[:-1].isdigit():
+        return f"{小文字[:-1]}W"
+    return 文字列
+
+
 def CSVを柔軟に読み込む(アップロードファイル) -> pd.DataFrame:
     生データ = アップロードファイル.getvalue()
     for 文字コード in ("utf-8", "utf-8-sig", "cp932"):
@@ -409,15 +430,15 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
 def create_profile_plot(long_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(9, 5))
     work = long_df.copy()
-    work["heat_display"] = work["heat"].map(加熱表示を整える)
-    work["time_display"] = work["time"].astype(str).map(時間表示を整える)
+    work["heat_display"] = work["heat"].map(グラフ用加熱表示を整える)
+    work["time_display"] = work["time"].astype(str).map(グラフ用時間表示を整える)
     summary = (
         work.groupby(["group", "heat_display", "time_display"], observed=True)["value"]
         .agg(["mean", "count", "std"])
         .reset_index()
     )
 
-    time_labels = [時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
+    time_labels = [グラフ用時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
     x_positions = np.arange(len(time_labels))
 
     for (group, heat), part in summary.groupby(["group", "heat_display"], observed=True):
@@ -443,11 +464,11 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(9, 5))
     selected_keys = long_df["subject_key"].drop_duplicates().tolist()[: min(30, long_df["subject_key"].nunique())]
     subset = long_df[long_df["subject_key"].isin(selected_keys)].copy()
-    time_labels = [時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
+    time_labels = [グラフ用時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
     xmap = {label: idx for idx, label in enumerate(time_labels)}
 
     for _, part in subset.groupby("subject_key"):
-        xs = [xmap[時間表示を整える(x)] for x in part["time"].astype(str).tolist()]
+        xs = [xmap[グラフ用時間表示を整える(x)] for x in part["time"].astype(str).tolist()]
         ax.plot(xs, part["value"].to_numpy(), marker="o", alpha=0.35)
 
     ax.set_xticks(np.arange(len(time_labels)))
