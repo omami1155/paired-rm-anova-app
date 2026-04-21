@@ -68,6 +68,19 @@ def 検定項名を整える(項名: str) -> str:
     return 整形後
 
 
+def 係数名を整える(係数名: str) -> str:
+    整形後 = 係数名
+    for 元, 新 in (
+        ("Intercept", "切片"),
+        ("C(group, Sum)[S.", "群["),
+        ("C(condition, Sum)[S.", "条件["),
+        ("C(time, Sum)[S.", "時間["),
+        (":", "×"),
+    ):
+        整形後 = 整形後.replace(元, 新)
+    return 整形後
+
+
 def 出現順で重複を除く(値一覧: pd.Series) -> list[str]:
     重複なし一覧: list[str] = []
     for 値 in 値一覧.astype(str).tolist():
@@ -146,6 +159,7 @@ def サンプル説明を表示する() -> None:
 
 - 1行 = 1サンプル
 - 必須の基本列 = `sample_id`, `group`, `condition`
+- `sample_id` はサンプル番号、`group` は群名、`condition` は条件名です
 - 時間列 = `t0`, `t1`, `t2` のように左から時系列順で並べます
 - `condition` は加熱/非加熱に限らず、任意の条件名で使えます
 - 測定値のセルには **数値だけ** を入れてください
@@ -374,7 +388,7 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
     try:
         係数表 = pd.DataFrame(
             {
-                "係数名": 適合済みモデル.fe_params.index,
+                "係数名": [係数名を整える(係数名) for 係数名 in 適合済みモデル.fe_params.index],
                 "推定値": 適合済みモデル.fe_params.values,
                 "標準誤差": 適合済みモデル.bse_fe.values,
                 "z値": 適合済みモデル.tvalues.loc[適合済みモデル.fe_params.index].values,
@@ -416,11 +430,11 @@ def create_profile_plot(long_df: pd.DataFrame):
 
     ax.set_xticks(x_positions)
     ax.set_xticklabels(time_labels)
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Value")
-    ax.set_title("Mean profiles by group and condition")
+    ax.set_xlabel("時間")
+    ax.set_ylabel("測定値")
+    ax.set_title("群・条件ごとの平均推移")
     ax.grid(axis="y", alpha=0.3)
-    ax.legend(ncol=2, fontsize=9)
+    ax.legend(title="群-条件", ncol=2, fontsize=9)
     fig.tight_layout()
     return fig
 
@@ -438,9 +452,9 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
 
     ax.set_xticks(np.arange(len(time_labels)))
     ax.set_xticklabels(time_labels)
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Value")
-    ax.set_title("Subject-level trajectories (first 30 samples)")
+    ax.set_xlabel("時間")
+    ax.set_ylabel("測定値")
+    ax.set_title("サンプルごとの推移（先頭30サンプル）")
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     return fig
@@ -472,6 +486,7 @@ def 記述統計を表示する(長形式データ: pd.DataFrame) -> None:
         file_name="descriptive_statistics.csv",
         mime="text/csv",
     )
+    st.caption("左は群・条件ごとの平均推移、右はサンプルごとの個別推移です。")
 
     左列, 右列 = st.columns(2)
     with 左列:
