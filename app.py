@@ -12,9 +12,6 @@ import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 
 
-# =========================
-# App constants
-# =========================
 PAGE_TITLE = "LMM（線形混合効果モデル）解析アプリ"
 PAGE_CAPTION = (
     "wide形式のCSVを使って、群 × 加熱 × 時間 の反復測定データを "
@@ -42,9 +39,6 @@ SAMPLE_WIDE_CSV = """sample_id,group,heat,直後,1週,2週,3週,4週,5週
 """
 
 
-# =========================
-# Data classes
-# =========================
 @dataclass
 class Settings:
     alpha: float
@@ -62,9 +56,6 @@ class LMMFitResult:
     coefficients_table: pd.DataFrame | None
 
 
-# =========================
-# Utility functions
-# =========================
 def to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8-sig")
 
@@ -84,7 +75,7 @@ def ordered_unique(values: pd.Series) -> list[str]:
     return ordered
 
 
-def display_heat_label(value: object) -> str:
+def normalize_heat_value(value: object) -> str:
     text = str(value).strip().lower()
     if text in {"加熱", "heat", "heated"}:
         return "heat"
@@ -93,9 +84,10 @@ def display_heat_label(value: object) -> str:
     return str(value)
 
 
-def display_time_label(value: object) -> str:
+def normalize_time_value(value: object) -> str:
     text = str(value).strip()
-    if text in {"直後", "immediate", "baseline", "0w", "0W", "t0", "T0"}:
+    lower = text.lower()
+    if lower in {"直後", "immediate", "baseline", "0w", "t0"}:
         return "0W"
     if text.endswith("週") and text[:-1].isdigit():
         return f"{text[:-1]}W"
@@ -128,9 +120,6 @@ def build_blank_wide_template() -> bytes:
     return pd.DataFrame(rows).to_csv(index=False).encode("utf-8-sig")
 
 
-# =========================
-# UI setup
-# =========================
 def configure_page() -> None:
     st.set_page_config(page_title=PAGE_TITLE, layout="wide")
     st.title(PAGE_TITLE)
@@ -198,9 +187,6 @@ def render_samples() -> None:
             )
 
 
-# =========================
-# Data preparation
-# =========================
 def guess_default_column(columns: list[str], candidates: list[str], fallback_index: int) -> str:
     for candidate in candidates:
         if candidate in columns:
@@ -257,7 +243,6 @@ def prepare_long_from_wide(df: pd.DataFrame) -> pd.DataFrame:
     long_df["subject_key"] = (
         long_df["group"] + "|" + long_df["heat"] + "|" + long_df["sample_id_raw"]
     )
-
     long_df = long_df.sort_values(["group", "heat", "subject_key", "time"]).reset_index(drop=True)
     return long_df
 
@@ -267,14 +252,14 @@ def validate_long_df(long_df: pd.DataFrame) -> tuple[list[str], list[str]]:
     errors: list[str] = []
 
     if long_df.empty:
-        errors.append("有効なデータがありません。数値列や列の割り当てを確認してください。")
+        errors.append("有効なデータがありません。")
         return warnings, errors
 
     duplicated = long_df.duplicated(subset=["subject_key", "time"], keep=False)
     if duplicated.any():
         errors.append(
-            "同じサンプル・同じ時点の組み合わせが重複しています。"
-            " 1サンプルにつき各時点は1つだけにしてください。"
+            "同じサンプル・同じ時点のデータが重複しています。"
+            " 1サンプルにつき各時点1行だけになるよう確認してください。"
         )
 
     if long_df["group"].nunique() < 2:
@@ -296,21 +281,37 @@ def validate_long_df(long_df: pd.DataFrame) -> tuple[list[str], list[str]]:
     return warnings, errors
 
 
+def prepare_display_long_df(long_df: pd.DataFrame) -> pd.DataFrame:
+    display_df = long_df.copy()
+    display_df["heat"] = display_df["heat"].map(normalize_heat_value)
+    display_df["time"] = display_df["time"].astype(str).map(normalize_time_value)
+    display_df = display_df.rename(
+        columns={
+            "sample_id_raw": "sample_id",
+            "group": "group",
+            "heat": "heat",
+            "time": "time",
+            "value": "value",
+            "subject_key": "subject_key",
+        }
+    )
+    return display_df[["sample_id", "group", "heat", "time", "value", "subject_key"]]
+
+
 def summarize_long_df(long_df: pd.DataFrame) -> pd.DataFrame:
+    work = long_df.copy()
+    work["heat_display"] = work["heat"].map(normalize_heat_value)
+    work["time_display"] = work["time"].astype(str).map(normalize_time_value)
+
     summary = (
-        long_df.groupby(["group", "heat", "time"], observed=True)["value"]
+        work.groupby(["group", "heat_display", "time_display"], observed=True)["value"]
         .agg(["count", "mean", "std", "median", "min", "max"])
         .reset_index()
     )
-    summary["heat"] = summary["heat"].map(display_heat_label)
-    summary["time"] = summary["time"].map(display_time_label)
     summary.columns = ["Group", "Heat", "Time", "N", "Mean", "SD", "Median", "Min", "Max"]
     return summary
 
 
-# =========================
-# Modeling
-# =========================
 def fit_lmm(long_df: pd.DataFrame, alpha: float) -> LMMFitResult:
     notes: list[str] = []
     fit_method = ""
@@ -394,34 +395,29 @@ def fit_lmm(long_df: pd.DataFrame, alpha: float) -> LMMFitResult:
     )
 
 
-# =========================
-# Plots
-# =========================
 def create_profile_plot(long_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(9, 5))
+    work = long_df.copy()
+    work["heat_display"] = work["heat"].map(normalize_heat_value)
+    work["time_display"] = work["time"].astype(str).map(normalize_time_value)
     summary = (
-        long_df.groupby(["group", "heat", "time"], observed=True)["value"]
+        work.groupby(["group", "heat_display", "time_display"], observed=True)["value"]
         .agg(["mean", "count", "std"])
         .reset_index()
     )
 
-    for (group, heat), part in summary.groupby(["group", "heat"], observed=True):
-        means = part["mean"].to_numpy()
-        counts = part["count"].to_numpy()
-        sds = part["std"].fillna(0).to_numpy()
-        sem = np.divide(sds, np.sqrt(np.maximum(counts, 1)), out=np.zeros_like(sds), where=np.maximum(counts, 1) > 0)
-        x = np.arange(len(part))
-        ax.errorbar(
-            x,
-            means,
-            yerr=sem,
-            marker="o",
-            capsize=3,
-            label=f"{group}-{display_heat_label(heat)}",
-        )
+    time_labels = [normalize_time_value(x) for x in long_df["time"].cat.categories.tolist()]
+    x_positions = np.arange(len(time_labels))
 
-    time_labels = [display_time_label(x) for x in summary["time"].drop_duplicates().tolist()]
-    ax.set_xticks(np.arange(len(time_labels)))
+    for (group, heat), part in summary.groupby(["group", "heat_display"], observed=True):
+        part = part.set_index("time_display").reindex(time_labels).reset_index()
+        means = part["mean"].to_numpy(dtype=float)
+        counts = part["count"].fillna(0).to_numpy(dtype=float)
+        sds = part["std"].fillna(0).to_numpy(dtype=float)
+        sem = np.divide(sds, np.sqrt(np.maximum(counts, 1)), out=np.zeros_like(sds), where=np.maximum(counts, 1) > 0)
+        ax.errorbar(x_positions, means, yerr=sem, marker="o", capsize=3, label=f"{group}-{heat}")
+
+    ax.set_xticks(x_positions)
     ax.set_xticklabels(time_labels)
     ax.set_xlabel("Time")
     ax.set_ylabel("Value")
@@ -436,12 +432,11 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(9, 5))
     selected_keys = long_df["subject_key"].drop_duplicates().tolist()[: min(30, long_df["subject_key"].nunique())]
     subset = long_df[long_df["subject_key"].isin(selected_keys)].copy()
-    time_keys = [str(x) for x in long_df["time"].cat.categories.tolist()]
-    time_labels = [display_time_label(x) for x in time_keys]
-    xmap = {label: idx for idx, label in enumerate(time_keys)}
+    time_labels = [normalize_time_value(x) for x in long_df["time"].cat.categories.tolist()]
+    xmap = {label: idx for idx, label in enumerate(time_labels)}
 
     for _, part in subset.groupby("subject_key"):
-        xs = [xmap[str(x)] for x in part["time"].astype(str).tolist()]
+        xs = [xmap[normalize_time_value(x)] for x in part["time"].astype(str).tolist()]
         ax.plot(xs, part["value"].to_numpy(), marker="o", alpha=0.35)
 
     ax.set_xticks(np.arange(len(time_labels)))
@@ -454,9 +449,6 @@ def create_spaghetti_subset_plot(long_df: pd.DataFrame):
     return fig
 
 
-# =========================
-# Post hoc helpers
-# =========================
 def apply_pvalue_correction(
     rows: list[dict[str, object]],
     pvals: list[float],
@@ -486,14 +478,18 @@ def run_heat_posthoc(long_df: pd.DataFrame, alpha: float, correction_method: str
         return pd.DataFrame()
 
     heat_a, heat_b = heat_levels[0], heat_levels[1]
+    label_a = normalize_heat_value(heat_a)
+    label_b = normalize_heat_value(heat_b)
+
     for (group, time), part in long_df.groupby(["group", "time"], observed=True):
         x = part.loc[part["heat"] == heat_a, "value"].dropna()
         y = part.loc[part["heat"] == heat_b, "value"].dropna()
+        time_label = normalize_time_value(time)
 
         if len(x) < 2 or len(y) < 2:
             rows.append(
                 {
-                    "Comparison": f"{group} / {display_time_label(time)}: {display_heat_label(heat_a)} vs {display_heat_label(heat_b)}",
+                    "Comparison": f"{group} / {time_label}: {label_a} vs {label_b}",
                     "n1": int(len(x)),
                     "n2": int(len(y)),
                     "Mean difference": np.nan,
@@ -507,19 +503,20 @@ def run_heat_posthoc(long_df: pd.DataFrame, alpha: float, correction_method: str
             continue
 
         test = stats.ttest_ind(x, y, equal_var=False, nan_policy="omit")
-        pvals.append(safe_float(test.pvalue))
+        p = safe_float(test.pvalue)
         rows.append(
             {
-                "Comparison": f"{group} / {display_time_label(time)}: {display_heat_label(heat_a)} vs {display_heat_label(heat_b)}",
+                "Comparison": f"{group} / {time_label}: {label_a} vs {label_b}",
                 "n1": int(len(x)),
                 "n2": int(len(y)),
                 "Mean difference": safe_float(x.mean() - y.mean()),
-                "Raw p-value": safe_float(test.pvalue),
+                "Raw p-value": p,
                 "Adjusted p-value": np.nan,
                 "Method": "Welch t-test",
                 "Decision": "",
             }
         )
+        pvals.append(p)
 
     return apply_pvalue_correction(rows, pvals, alpha, correction_method)
 
@@ -532,14 +529,18 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
         return pd.DataFrame()
 
     baseline = time_levels[0]
+    baseline_label = normalize_time_value(baseline)
+
     for (group, heat), part in long_df.groupby(["group", "heat"], observed=True):
         wide = part.pivot_table(index="subject_key", columns="time", values="value", aggfunc="first")
+        heat_label = normalize_heat_value(heat)
 
         for later in time_levels[1:]:
+            later_label = normalize_time_value(later)
             if baseline not in wide.columns or later not in wide.columns:
                 rows.append(
                     {
-                        "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
+                        "Comparison": f"{group} / {heat_label}: {baseline_label} vs {later_label}",
                         "n": 0,
                         "Mean difference": np.nan,
                         "Raw p-value": np.nan,
@@ -555,7 +556,7 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
             if len(pair) < 2:
                 rows.append(
                     {
-                        "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
+                        "Comparison": f"{group} / {heat_label}: {baseline_label} vs {later_label}",
                         "n": int(len(pair)),
                         "Mean difference": np.nan,
                         "Raw p-value": np.nan,
@@ -568,42 +569,41 @@ def run_time_posthoc_against_baseline(long_df: pd.DataFrame, alpha: float, corre
                 continue
 
             test = stats.ttest_rel(pair[baseline], pair[later], nan_policy="omit")
-            pvals.append(safe_float(test.pvalue))
+            p = safe_float(test.pvalue)
             rows.append(
                 {
-                    "Comparison": f"{group} / {display_heat_label(heat)}: {display_time_label(baseline)} vs {display_time_label(later)}",
+                    "Comparison": f"{group} / {heat_label}: {baseline_label} vs {later_label}",
                     "n": int(len(pair)),
                     "Mean difference": safe_float(pair[baseline].mean() - pair[later].mean()),
-                    "Raw p-value": safe_float(test.pvalue),
+                    "Raw p-value": p,
                     "Adjusted p-value": np.nan,
                     "Method": "paired t-test",
                     "Decision": "",
                 }
             )
+            pvals.append(p)
 
     return apply_pvalue_correction(rows, pvals, alpha, correction_method)
 
 
-# =========================
-# Render helpers
-# =========================
 def render_dataset_overview(long_df: pd.DataFrame) -> None:
-    st.subheader("解析に使うデータ")
-    st.dataframe(long_df.head(100), use_container_width=True)
+    st.subheader("解析に使う整形後データ")
+    display_df = prepare_display_long_df(long_df)
+    st.dataframe(display_df.head(100), use_container_width=True)
     st.caption(
-        f"行数: {len(long_df)} / サンプル数: {long_df['subject_key'].nunique()} / "
+        f"行数: {len(display_df)} / サンプル数: {long_df['subject_key'].nunique()} / "
         f"群: {long_df['group'].nunique()} / 加熱: {long_df['heat'].nunique()} / 時間: {long_df['time'].nunique()}"
     )
     st.download_button(
-        label="整形後データ（long形式）をダウンロード",
-        data=to_csv_bytes(long_df),
+        label="整形後データCSVをダウンロード",
+        data=to_csv_bytes(display_df),
         file_name="prepared_long_data.csv",
         mime="text/csv",
     )
 
 
 def render_summary(long_df: pd.DataFrame) -> None:
-    st.subheader("Descriptive statistics")
+    st.subheader("記述統計")
     summary_df = summarize_long_df(long_df)
     st.dataframe(summary_df, use_container_width=True)
     st.download_button(
@@ -633,17 +633,16 @@ def render_lmm_results(fit: LMMFitResult) -> None:
         return
 
     st.success(f"LMM の適合に成功しました（method={fit.fit_method}）。")
-
     if fit.notes:
         for note in fit.notes:
             st.warning(note)
 
     if fit.terms_table is not None:
-        st.markdown("**Overall fixed-effect tests (Wald Chi-square)**")
+        st.markdown("**固定効果の全体検定**")
         st.dataframe(fit.terms_table, use_container_width=True)
         st.caption(
             "通常はまず `group:heat:time` の交互作用を見て、"
-            "有意なら単純主効果や補助比較へ進みます。"
+            "有意なら単純主効果や事後比較へ進みます。"
         )
         st.download_button(
             label="全体検定CSVをダウンロード",
@@ -653,7 +652,7 @@ def render_lmm_results(fit: LMMFitResult) -> None:
         )
 
     if fit.coefficients_table is not None:
-        st.markdown("**Fixed-effect coefficients**")
+        st.markdown("**固定効果係数**")
         st.dataframe(fit.coefficients_table, use_container_width=True)
         st.download_button(
             label="固定効果係数CSVをダウンロード",
@@ -664,24 +663,26 @@ def render_lmm_results(fit: LMMFitResult) -> None:
 
 
 def render_posthoc(long_df: pd.DataFrame, settings: Settings) -> None:
-    st.subheader("Post hoc comparisons")
-    st.caption("主たる結論は LMM 主解析を優先してください。ここは読みやすさ重視の補助解析です。")
+    st.subheader("補助的な事後比較")
+    st.caption(
+        "ここは読みやすさを優先した補助解析です。主たる結論は上のLMM主解析を優先してください。"
+    )
 
     heat_df = run_heat_posthoc(long_df, settings.alpha, settings.correction_method)
     time_df = run_time_posthoc_against_baseline(long_df, settings.alpha, settings.correction_method)
 
     if not heat_df.empty:
-        st.markdown("**Heat vs no heat within each group and time point**")
+        st.markdown("**各群×各時点での加熱 vs 非加熱**")
         st.dataframe(heat_df, use_container_width=True)
         st.download_button(
-            label="加熱 vs 非加熱 比較CSVをダウンロード",
+            label="加熱vs非加熱 比較CSVをダウンロード",
             data=to_csv_bytes(heat_df),
             file_name="posthoc_heat_within_group_time.csv",
             mime="text/csv",
         )
 
     if not time_df.empty:
-        st.markdown("**Baseline vs each later time point within each group and heat condition**")
+        st.markdown("**各群×加熱条件でのベースライン vs 各時点**")
         st.dataframe(time_df, use_container_width=True)
         st.download_button(
             label="ベースライン比較CSVをダウンロード",
@@ -691,29 +692,26 @@ def render_posthoc(long_df: pd.DataFrame, settings: Settings) -> None:
         )
 
 
-# =========================
-# Main
-# =========================
 def main() -> None:
     configure_page()
     settings = render_sidebar()
     render_samples()
 
-    uploaded_file = st.file_uploader("wide形式のCSVをアップロード", type=["csv"])
+    uploaded_file = st.file_uploader("CSVをアップロード", type=["csv"])
     if uploaded_file is None:
-        st.info("CSV をアップロードすると解析を開始します。")
+        st.info("CSVをアップロードすると解析を開始します。")
         return
 
     try:
-        source_df = load_csv_flex(uploaded_file)
+        df = load_csv_flex(uploaded_file)
     except Exception as exc:
         st.error(f"CSV の読み込みに失敗しました: {exc}")
         return
 
-    st.subheader("元データのプレビュー")
-    st.dataframe(source_df.head(50), use_container_width=True)
+    st.subheader("データプレビュー")
+    st.dataframe(df.head(50), use_container_width=True)
 
-    long_df = prepare_long_from_wide(source_df)
+    long_df = prepare_long_from_wide(df)
     if long_df.empty:
         return
 
