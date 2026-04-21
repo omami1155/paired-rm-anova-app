@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from patsy.contrasts import Sum
 import streamlit as st
 import statsmodels.formula.api as smf
 
@@ -50,6 +51,20 @@ class LMM適合結果:
 
 def csvをバイト列へ変換する(データフレーム: pd.DataFrame) -> bytes:
     return データフレーム.to_csv(index=False).encode("utf-8-sig")
+
+
+def 検定項名を整える(項名: str) -> str:
+    if 項名 == "Intercept":
+        return "Intercept"
+
+    整形後 = 項名
+    for 元, 新 in (
+        ("C(group, Sum)", "group"),
+        ("C(condition, Sum)", "condition"),
+        ("C(time, Sum)", "time"),
+    ):
+        整形後 = 整形後.replace(元, 新)
+    return 整形後
 
 
 def 出現順で重複を除く(値一覧: pd.Series) -> list[str]:
@@ -305,11 +320,7 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
     条件水準一覧 = 出現順で重複を除く(長形式データ["condition"])
     時間水準一覧 = [str(値) for 値 in 長形式データ["time"].cat.categories.tolist()]
 
-    数式 = (
-        f"value ~ C(group, levels={群水準一覧!r})"
-        f" * C(condition, levels={条件水準一覧!r})"
-        f" * C(time, levels={時間水準一覧!r})"
-    )
+    数式 = "value ~ C(group, Sum) * C(condition, Sum) * C(time, Sum)"
 
     作業データ = 長形式データ.copy()
     作業データ["group"] = pd.Categorical(作業データ["group"], categories=群水準一覧)
@@ -351,6 +362,8 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
                 "df_constraint": "自由度",
             }
         )
+        全体検定表["項"] = 全体検定表["項"].map(検定項名を整える)
+        全体検定表 = 全体検定表[全体検定表["項"] != "Intercept"].reset_index(drop=True)
         全体検定表["判定"] = 全体検定表["p値"].apply(
             lambda p値: "有意" if pd.notna(p値) and p値 < 有意水準 else "有意差なし"
         )
@@ -487,8 +500,8 @@ def LMM結果を表示する(適合結果: LMM適合結果) -> None:
         st.markdown("**固定効果の全体検定**")
         st.dataframe(適合結果.全体検定表, use_container_width=True)
         st.caption(
-            "通常はまず `group:condition:time` の交互作用を確認し、"
-            "必要に応じて別途追解析を検討してください。"
+            "Sum contrast による Wald のカイ二乗検定です。"
+            " 参照水準やCSVの行順に依存しにくい形で、Intercept は表示から外しています。"
         )
         st.download_button(
             label="全体検定CSVをダウンロード",
@@ -500,6 +513,7 @@ def LMM結果を表示する(適合結果: LMM適合結果) -> None:
     if 適合結果.係数表 is not None:
         st.markdown("**固定効果係数**")
         st.dataframe(適合結果.係数表, use_container_width=True)
+        st.caption("係数は Sum contrast 符号化で推定されるため、各水準の偏差として解釈してください。")
         st.download_button(
             label="固定効果係数CSVをダウンロード",
             data=csvをバイト列へ変換する(適合結果.係数表),
