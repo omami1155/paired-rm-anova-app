@@ -14,10 +14,9 @@ plt.rcParams["font.family"] = ["Yu Gothic", "Meiryo", "MS Gothic", "DejaVu Sans"
 plt.rcParams["axes.unicode_minus"] = False
 
 
-ページタイトル = "LMM（線形混合効果モデル）解析アプリ"
+ページタイトル = "線形混合効果モデル解析"
 ページ説明 = (
-    "wide形式のCSVを使って、群 × 条件 × 時間 の反復測定データを "
-    "ランダム切片付きLMMで解析します。"
+    "CSVを使って、群 × 条件 × 時間 の反復測定データを解析します。"
 )
 固定有意水準 = 0.05
 既定時間列一覧 = ["t0", "t1", "t2", "t3", "t4", "t5"]
@@ -184,7 +183,6 @@ def ページを設定する() -> None:
     st.title(ページタイトル)
     st.caption(ページ説明)
     st.info(
-        "このアプリは wide形式専用です。"
         " 1行=1サンプル、列=sample_id / group / condition / 各時点 の形で使ってください。"
     )
 
@@ -206,8 +204,6 @@ def サンプル説明を表示する() -> None:
 **おすすめの列順**
 
 `sample_id, group, condition, t0, t1, t2, t3, t4, t5`
-
-`sample_id` は **各 group × condition の中で 1〜10 を繰り返してOK** です。
             """
         )
 
