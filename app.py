@@ -38,7 +38,6 @@ plt.rcParams["axes.unicode_minus"] = False
 @dataclass
 class LMM適合結果:
     適合済みモデル: object | None
-    数式: str
     適合法: str
     補足一覧: list[str]
     エラー内容: str
@@ -398,7 +397,7 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
 
     if 適合済みモデル is None:
         エラー内容 = f"LMM の適合に失敗しました: {最後の例外}"
-        return LMM適合結果(None, 数式, 適合法, 補足一覧, エラー内容, None, None)
+        return LMM適合結果(None, 適合法, 補足一覧, エラー内容, None, None)
 
     try:
         wald結果 = 適合済みモデル.wald_test_terms(scalar=True)
@@ -433,7 +432,6 @@ def LMMを適合する(長形式データ: pd.DataFrame, 有意水準: float) ->
 
     return LMM適合結果(
         適合済みモデル=適合済みモデル,
-        数式=数式,
         適合法=適合法,
         補足一覧=補足一覧,
         エラー内容=エラー内容,
@@ -728,7 +726,6 @@ def 記述統計を表示する(長形式データ: pd.DataFrame) -> None:
 
 def LMM結果を表示する(適合結果: LMM適合結果, 長形式データ: pd.DataFrame) -> None:
     st.subheader("LMM主解析")
-    st.code(適合結果.数式)
 
     if 適合結果.エラー内容:
         st.error(適合結果.エラー内容)
