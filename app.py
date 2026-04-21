@@ -105,6 +105,41 @@ def グラフ用時間表示を整える(値: object) -> str:
     return str(値).strip()
 
 
+def グラフ用時間対応表を作る(長形式データ: pd.DataFrame) -> tuple[list[str], dict[str, str], pd.DataFrame]:
+    元時間一覧 = [str(値) for 値 in 長形式データ["time"].cat.categories.tolist()]
+    表示ラベル対応 = {元時間: f"T{番号}" for 番号, 元時間 in enumerate(元時間一覧, start=1)}
+    対応表 = pd.DataFrame(
+        {
+            "Time code": list(表示ラベル対応.values()),
+            "時間": 元時間一覧,
+        }
+    )
+    return 元時間一覧, 表示ラベル対応, 対応表
+
+
+def グラフ用系列対応表を作る(長形式データ: pd.DataFrame) -> tuple[dict[tuple[str, str], str], pd.DataFrame]:
+    群一覧 = 出現順で重複を除く(長形式データ["group"])
+    条件一覧 = 出現順で重複を除く(長形式データ["condition"])
+    群コード対応 = {群名: f"G{番号}" for 番号, 群名 in enumerate(群一覧, start=1)}
+    条件コード対応 = {条件名: f"C{番号}" for 番号, 条件名 in enumerate(条件一覧, start=1)}
+
+    系列対応: dict[tuple[str, str], str] = {}
+    対応表行一覧: list[dict[str, str]] = []
+    for 群名 in 群一覧:
+        for 条件名 in 条件一覧:
+            系列コード = f"{群コード対応[群名]}-{条件コード対応[条件名]}"
+            系列対応[(群名, 条件名)] = 系列コード
+            対応表行一覧.append(
+                {
+                    "Series": 系列コード,
+                    "群": 群名,
+                    "条件": 条件名,
+                }
+            )
+
+    return 系列対応, pd.DataFrame(対応表行一覧)
+
+
 def CSVを柔軟に読み込む(アップロードファイル) -> pd.DataFrame:
     生データ = アップロードファイル.getvalue()
     for 文字コード in ("utf-8", "utf-8-sig", "cp932"):
@@ -420,42 +455,22 @@ def create_profile_plot(long_df: pd.DataFrame):
         .reset_index()
     )
 
-    time_labels = [グラフ用時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
+    time_labels, 時間コード対応, _ = グラフ用時間対応表を作る(long_df)
+    系列コード対応, _ = グラフ用系列対応表を作る(long_df)
     x_positions = np.arange(len(time_labels))
 
     for (group, condition), part in summary.groupby(["group", "condition_display"], observed=True):
         part = part.set_index("time_display").reindex(time_labels).reset_index()
         means = part["mean"].to_numpy(dtype=float)
-        ax.plot(x_positions, means, marker="o", label=f"{group}-{condition}")
+        ax.plot(x_positions, means, marker="o", label=系列コード対応[(group, condition)])
 
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(time_labels)
-    ax.set_xlabel("時間")
-    ax.set_ylabel("測定値")
-    ax.set_title("群・条件ごとの平均推移")
+    ax.set_xticklabels([時間コード対応[時間] for 時間 in time_labels])
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    ax.set_title("Mean trajectories")
     ax.grid(axis="y", alpha=0.3)
-    ax.legend(title="群-条件", ncol=2, fontsize=9)
-    fig.tight_layout()
-    return fig
-
-
-def create_spaghetti_subset_plot(long_df: pd.DataFrame):
-    fig, ax = plt.subplots(figsize=(9, 5))
-    selected_keys = long_df["subject_key"].drop_duplicates().tolist()[: min(30, long_df["subject_key"].nunique())]
-    subset = long_df[long_df["subject_key"].isin(selected_keys)].copy()
-    time_labels = [グラフ用時間表示を整える(x) for x in long_df["time"].cat.categories.tolist()]
-    xmap = {label: idx for idx, label in enumerate(time_labels)}
-
-    for _, part in subset.groupby("subject_key"):
-        xs = [xmap[グラフ用時間表示を整える(x)] for x in part["time"].astype(str).tolist()]
-        ax.plot(xs, part["value"].to_numpy(), marker="o", alpha=0.35)
-
-    ax.set_xticks(np.arange(len(time_labels)))
-    ax.set_xticklabels(time_labels)
-    ax.set_xlabel("時間")
-    ax.set_ylabel("測定値")
-    ax.set_title("サンプルごとの推移（先頭30サンプル）")
-    ax.grid(axis="y", alpha=0.3)
+    ax.legend(title="Series", ncol=2, fontsize=9)
     fig.tight_layout()
     return fig
 
@@ -486,17 +501,21 @@ def 記述統計を表示する(長形式データ: pd.DataFrame) -> None:
         file_name="descriptive_statistics.csv",
         mime="text/csv",
     )
-    st.caption("左は群・条件ごとの平均推移、右はサンプルごとの個別推移です。")
+    st.caption("グラフ内は英字表記に統一しています。下の対応表で系列コードと時間コードを確認できます。")
+
+    fig = create_profile_plot(長形式データ)
+    st.pyplot(fig)
+    plt.close(fig)
 
     左列, 右列 = st.columns(2)
+    系列対応, 系列表 = グラフ用系列対応表を作る(長形式データ)
+    _時間一覧, _時間コード対応, 時間表 = グラフ用時間対応表を作る(長形式データ)
     with 左列:
-        fig = create_profile_plot(長形式データ)
-        st.pyplot(fig)
-        plt.close(fig)
+        st.markdown("**系列コード対応**")
+        st.dataframe(系列表, use_container_width=True, hide_index=True)
     with 右列:
-        fig = create_spaghetti_subset_plot(長形式データ)
-        st.pyplot(fig)
-        plt.close(fig)
+        st.markdown("**時間コード対応**")
+        st.dataframe(時間表, use_container_width=True, hide_index=True)
 
 
 def LMM結果を表示する(適合結果: LMM適合結果) -> None:
